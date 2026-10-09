@@ -35,8 +35,8 @@
 Нужны macOS и Node.js 18 или новее.
 
 ```bash
-git clone https://github.com/garik-sukhanov/VideoPilot.git
-cd VideoPilot
+git clone https://github.com/garik-sukhanov/video-pilot.git
+cd video-pilot
 npm install
 npm run dev
 ```
