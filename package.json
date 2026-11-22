@@ -83,6 +83,9 @@
     },
     "dmg": {
       "title": "${productName} ${version}"
+    },
+    "zip": {
+      "artifactName": "${productName}-${version}-${arch}-mac.${ext}"
     }
   }
 }

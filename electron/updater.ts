@@ -69,10 +69,12 @@ function bundlePath(): string | null {
 
 function pickAsset(assets: ReleaseAsset[]): ReleaseAsset | null {
   const zips = assets.filter((a) => a.name.endsWith('.zip') && /mac/i.test(a.name));
+  const other = process.arch === 'arm64' ? 'x64' : 'arm64';
   return (
     zips.find((a) => a.name.includes(`-${process.arch}-`)) ??
     zips.find((a) => a.name.includes('universal')) ??
-    zips[0] ??
+    // архив без пометки архитектуры, но не под чужой процессор
+    zips.find((a) => !a.name.includes(`-${other}-`)) ??
     null
   );
 }
