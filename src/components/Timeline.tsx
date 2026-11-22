@@ -10,6 +10,7 @@ import {
 import type { TimelineClip, Track } from '../types';
 import { Waveform } from './Waveform';
 import { ClipContextMenu } from './ClipContextMenu';
+import { importPaths, isFileDrag, pathsFromDrop } from '../mediaImport';
 
 const TRACK_HEIGHT = 52;
 const TRACK_GAP = 4;
@@ -110,7 +111,8 @@ export function Timeline() {
     const types = e.dataTransfer.types;
     if (
       types.includes('application/x-videopilot-asset-ids') ||
-      types.includes('application/x-videopilot-asset')
+      types.includes('application/x-videopilot-asset') ||
+      isFileDrag(e.dataTransfer)
     ) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
@@ -127,10 +129,19 @@ export function Timeline() {
     setInsertionPreview(null);
   }
 
-  function handleDrop(e: React.DragEvent, track: Track) {
+  async function handleDrop(e: React.DragEvent, track: Track) {
     e.preventDefault();
     setDragOverTrack(null);
     setInsertionPreview(null);
+
+    // Файлы из Finder: импорт в исходники и сразу на дорожку в точку броска.
+    if (isFileDrag(e.dataTransfer)) {
+      e.stopPropagation();
+      const at = clickXToSec(e.clientX);
+      const added = await importPaths(pathsFromDrop(e.dataTransfer));
+      placeAssets(added.map((a) => a.id), track, at);
+      return;
+    }
 
     let assetIds: string[] = [];
     const multi = e.dataTransfer.getData('application/x-videopilot-asset-ids');
@@ -146,8 +157,10 @@ export function Timeline() {
       if (single) assetIds = [single];
     }
     if (assetIds.length === 0) return;
+    placeAssets(assetIds, track, clickXToSec(e.clientX));
+  }
 
-    const requestedStart = clickXToSec(e.clientX);
+  function placeAssets(assetIds: string[], track: Track, requestedStart: number) {
 
     const insertions: Array<{
       trackId: string;
@@ -424,7 +437,7 @@ export function Timeline() {
 
       <div className="flex-1 flex min-h-0">
         <div
-          className="border-r border-border bg-panel-2 flex flex-col overflow-y-auto"
+          className="border-r border-border bg-panel-2 flex flex-col shrink-0 overflow-y-auto overflow-x-hidden"
           style={{ width: HEADER_WIDTH }}
         >
           <div style={{ height: RULER_HEIGHT }} className="border-b border-border" />
@@ -480,6 +493,7 @@ export function Timeline() {
                   onDragOver={(e) => handleDragOver(e, track)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, track)}
+                  data-track-drop={track.id}
                 >
                   <div className="absolute inset-0 bg-panel-3/40 border-y border-border" />
 
@@ -739,10 +753,10 @@ function TrackHeader({
           step={0.01}
           value={track.volume}
           onChange={(e) => onVolume(parseFloat(e.target.value))}
-          className="flex-1 accent-accent h-1"
+          className="flex-1 min-w-0 w-0 accent-accent h-1"
           title="Громкость"
         />
-        <span className="text-[9px] text-gray-500 w-6 text-right">
+        <span className="text-[9px] text-gray-500 w-6 shrink-0 text-right tabular-nums">
           {Math.round(track.volume * 100)}
         </span>
       </div>

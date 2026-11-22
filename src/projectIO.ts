@@ -144,6 +144,18 @@ function afterOpen(doc: ProjectDocument) {
   void flagMissingMedia().then(regenerateWaveforms);
 }
 
+/** Replace the open project with a document written by the local agent API,
+ *  then persist it. Undo history is reset, as on a normal open. */
+export async function applyExternalDocument(doc: ProjectDocument): Promise<void> {
+  if (useAppStore.getState().current?.id !== doc.id) throw new Error('открыт другой проект');
+  stopAutosave();
+  useStore.getState().loadDocument(doc);
+  useAppStore.getState().setName(doc.name);
+  startAutosave();
+  await saveCurrentProject();
+  void flagMissingMedia().then(regenerateWaveforms);
+}
+
 export async function openProject(id: string): Promise<void> {
   const doc = await window.vp.projects.load(id);
   afterOpen(doc);

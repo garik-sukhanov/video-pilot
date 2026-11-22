@@ -52,7 +52,7 @@ async function readJson<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
-async function listProjects(): Promise<ProjectMeta[]> {
+export async function listProjects(): Promise<ProjectMeta[]> {
   await ensureRoot();
   const entries = await readdir(projectsRoot(), { withFileTypes: true });
   const metas: ProjectMeta[] = [];
@@ -105,12 +105,12 @@ async function createProject(name: string): Promise<ProjectDocument> {
   return doc;
 }
 
-async function loadProject(id: string): Promise<ProjectDocument> {
+export async function loadProject(id: string): Promise<ProjectDocument> {
   const docPath = join(projectDir(id), 'project.json');
   return readJson<ProjectDocument>(docPath);
 }
 
-async function saveProject(doc: ProjectDocument, poster?: string): Promise<ProjectMeta> {
+export async function saveProject(doc: ProjectDocument, poster?: string): Promise<ProjectMeta> {
   const dir = projectDir(doc.id);
   await mkdir(dir, { recursive: true });
   const toWrite: ProjectDocument = { ...doc, updatedAt: new Date().toISOString() };

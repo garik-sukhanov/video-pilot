@@ -1,9 +1,7 @@
 import type { IpcMain, WebContents } from 'electron';
 import { spawn, ChildProcess } from 'node:child_process';
-import { createRequire } from 'node:module';
 import type { ColorCorrection, ExportSpec } from '../../src/types.js';
-
-const require = createRequire(import.meta.url);
+import { ffmpegPath } from './ffmpeg.js';
 
 function colorToEqFilter(c: ColorCorrection | undefined): string {
   if (!c || !c.enabled) return '';
@@ -16,12 +14,6 @@ function colorToEqFilter(c: ColorCorrection | undefined): string {
   return `eq=${parts.join(':')}`;
 }
 
-function resolveFfmpegPath(): string {
-  const p = require('ffmpeg-static') as string;
-  return p.replace('app.asar', 'app.asar.unpacked');
-}
-
-const ffmpegPath = resolveFfmpegPath();
 
 let activeChild: ChildProcess | null = null;
 
@@ -183,7 +175,7 @@ function buildExportArgs(spec: ExportSpec): string[] {
   return args;
 }
 
-function runExport(
+export function runExport(
   spec: ExportSpec,
   webContents: WebContents,
 ): Promise<{ ok: boolean; path: string }> {

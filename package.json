@@ -1,6 +1,6 @@
 {
   "name": "videopilot",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Local video editor for macOS",
   "author": "Garik Sukhanov",
   "license": "MIT",
@@ -18,7 +18,8 @@
     "dist": "npm run prepare:ffmpeg && electron-vite build && electron-builder --mac --universal",
     "dist:universal": "npm run prepare:ffmpeg && electron-vite build && electron-builder --mac --universal",
     "dist:arm64": "npm run prepare:ffmpeg && electron-vite build && electron-builder --mac --arm64",
-    "dist:x64": "npm run prepare:ffmpeg && electron-vite build && electron-builder --mac --x64"
+    "dist:x64": "npm run prepare:ffmpeg && electron-vite build && electron-builder --mac --x64",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

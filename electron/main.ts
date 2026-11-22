@@ -1,12 +1,14 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { stat, readdir } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { registerFfmpegHandlers } from './ipc/ffmpeg.js';
 import { registerExportHandlers } from './ipc/export.js';
 import { registerProjectHandlers } from './ipc/projects.js';
+import { startAgentServer } from './agent.js';
+import { checkForUpdate, startUpdater } from './updater.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -129,6 +131,9 @@ app.whenReady().then(() => {
   registerExportHandlers(ipcMain);
   registerProjectHandlers(ipcMain);
   createWindow();
+  startAgentServer(() => mainWindow);
+  startUpdater(() => mainWindow);
+  installMenu();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -178,6 +183,31 @@ function registerIpc() {
     return result.filePaths;
   });
 
+  // Перетаскивание из Finder: папки раскрываются, лишние форматы отсеиваются.
+  ipcMain.handle('fs:expandMedia', async (_e, paths: string[], exts: string[]) => {
+    const allow = new Set(exts.map((x) => x.toLowerCase()));
+    const files: string[] = [];
+    const skipped: string[] = [];
+    async function walk(p: string, depth: number) {
+      let st;
+      try {
+        st = await stat(p);
+      } catch {
+        return;
+      }
+      if (st.isDirectory()) {
+        if (depth > 4) return;
+        const names = (await readdir(p)).filter((n) => !n.startsWith('.')).sort((a, b) => a.localeCompare(b));
+        for (const n of names) await walk(join(p, n), depth + 1);
+        return;
+      }
+      if (allow.has(extname(p).slice(1).toLowerCase())) files.push(p);
+      else skipped.push(p);
+    }
+    for (const p of paths) await walk(p, 0);
+    return { files, skipped };
+  });
+
   ipcMain.handle('dialog:relinkMedia', async (_e, fileName: string) => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -207,4 +237,34 @@ function registerIpc() {
     });
     return result.canceled ? null : result.filePath;
   });
+}
+
+function installMenu() {
+  const menu = Menu.buildFromTemplate([
+    {
+      role: 'appMenu',
+      submenu: [
+        { role: 'about', label: 'О VideoPilot' },
+        {
+          label: 'Проверить обновления…',
+          click: () => {
+            mainWindow?.webContents.send('update:showPanel');
+            void checkForUpdate();
+          },
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ]);
+  Menu.setApplicationMenu(menu);
 }

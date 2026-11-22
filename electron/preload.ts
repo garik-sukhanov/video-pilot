@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   ExportProgress,
   ExportSpec,
@@ -14,6 +14,10 @@ const api = {
   saveFileDialog: (defaultName: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:saveFile', defaultName),
   pathExists: (filePath: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', filePath),
+  // Путь файла, перетащенного из Finder (File.path убран в Electron 32).
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
+  expandMediaPaths: (paths: string[], exts: string[]): Promise<{ files: string[]; skipped: string[] }> =>
+    ipcRenderer.invoke('fs:expandMedia', paths, exts),
 
   projects: {
     list: (): Promise<ProjectMeta[]> => ipcRenderer.invoke('projects:list'),
@@ -52,6 +56,32 @@ const api = {
   },
   revealInFinder: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('shell:revealInFinder', filePath),
+
+  updates: {
+    getState: (): Promise<unknown> => ipcRenderer.invoke('update:getState'),
+    check: (): Promise<unknown> => ipcRenderer.invoke('update:check'),
+    install: (): Promise<boolean> => ipcRenderer.invoke('update:install'),
+    onState: (cb: (s: unknown) => void): (() => void) => {
+      const l = (_e: unknown, s: unknown) => cb(s);
+      ipcRenderer.on('update:state', l);
+      return () => ipcRenderer.removeListener('update:state', l);
+    },
+    onShowPanel: (cb: () => void): (() => void) => {
+      const l = () => cb();
+      ipcRenderer.on('update:showPanel', l);
+      return () => ipcRenderer.removeListener('update:showPanel', l);
+    },
+  },
+
+  // Local agent API (electron/agent.ts) asks the renderer about the open project.
+  onAgentRequest: (cb: (id: number, op: string, payload: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, id: number, op: string, payload: unknown) => cb(id, op, payload);
+    ipcRenderer.on('agent:request', listener);
+    return () => ipcRenderer.removeListener('agent:request', listener);
+  },
+  agentReply: (id: number, ok: boolean, data: unknown): void => {
+    ipcRenderer.send('agent:reply', id, ok, data);
+  },
 };
 
 contextBridge.exposeInMainWorld('vp', api);

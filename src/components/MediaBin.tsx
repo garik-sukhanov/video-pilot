@@ -1,20 +1,44 @@
-import { useState } from 'react';
-import { useStore, formatTime, makeId } from '../store';
+import { useEffect, useState } from 'react';
+import { useStore, formatTime } from '../store';
 import type { MediaAsset } from '../types';
+import { importPaths, isFileDrag, useImportStore } from '../mediaImport';
 
-function basename(p: string): string {
-  return p.split('/').pop() ?? p;
-}
-
-interface ImportProgress {
-  total: number;
-  done: number;
-  currentName: string;
+/** Идёт ли сейчас перетаскивание файлов из Finder над окном. */
+function useFileDragOver(): boolean {
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    let depth = 0;
+    const enter = (e: DragEvent) => {
+      if (!isFileDrag(e.dataTransfer)) return;
+      depth++;
+      setOver(true);
+    };
+    const leave = (e: DragEvent) => {
+      if (!isFileDrag(e.dataTransfer)) return;
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setOver(false);
+    };
+    const done = () => {
+      depth = 0;
+      setOver(false);
+    };
+    window.addEventListener('dragenter', enter);
+    window.addEventListener('dragleave', leave);
+    // capture: бросок на дорожку таймлайна останавливает всплытие, а погасить подсветку нужно всё равно
+    window.addEventListener('drop', done, true);
+    window.addEventListener('dragend', done, true);
+    return () => {
+      window.removeEventListener('dragenter', enter);
+      window.removeEventListener('dragleave', leave);
+      window.removeEventListener('drop', done, true);
+      window.removeEventListener('dragend', done, true);
+    };
+  }, []);
+  return over;
 }
 
 export function MediaBin() {
   const assets = useStore((s) => s.assets);
-  const addAssets = useStore((s) => s.addAssets);
   const removeAsset = useStore((s) => s.removeAsset);
   const relinkAsset = useStore((s) => s.relinkAsset);
   const selectAsset = useStore((s) => s.selectAsset);
@@ -23,60 +47,17 @@ export function MediaBin() {
   const clearAssetSelection = useStore((s) => s.clearAssetSelection);
   const selectedAssetIds = useStore((s) => s.selectedAssetIds);
 
-  const [progress, setProgress] = useState<ImportProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const progress = useImportStore((s) => s.progress);
+  const notice = useImportStore((s) => s.notice);
+  const error = useImportStore((s) => s.error);
+  const fileDragOver = useFileDragOver();
 
   async function handleImport() {
-    setError(null);
     try {
       const paths = await window.vp.openMediaDialog();
-      if (paths.length === 0) return;
-
-      setProgress({ total: paths.length, done: 0, currentName: '' });
-
-      const newAssets: MediaAsset[] = [];
-      for (let i = 0; i < paths.length; i++) {
-        const filePath = paths[i];
-        const name = basename(filePath);
-        setProgress({ total: paths.length, done: i, currentName: name });
-        try {
-          const probe = await window.vp.probeMedia(filePath);
-          let thumb: string | undefined;
-          if (probe.hasVideo) {
-            try {
-              thumb = await window.vp.extractThumbnail(filePath, Math.min(1, probe.durationSec / 2));
-            } catch {
-              /* thumbnail optional */
-            }
-          }
-          const asset: MediaAsset = {
-            id: makeId(),
-            filePath,
-            fileName: name,
-            probe,
-            thumbnail: thumb,
-          };
-          newAssets.push(asset);
-          addAssets([asset]);
-          if (probe.hasAudio) {
-            window.vp
-              .extractWaveform(filePath)
-              .then((peaks) => useStore.getState().setWaveform(asset.id, peaks))
-              .catch((err) => console.warn('waveform extraction failed', filePath, err));
-          }
-        } catch (e) {
-          console.error('probe failed', filePath, e);
-        }
-      }
-      setProgress({ total: paths.length, done: paths.length, currentName: '' });
-
-      if (newAssets.length > 0) {
-        selectAsset(newAssets[0].id);
-      }
+      await importPaths(paths);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setTimeout(() => setProgress(null), 400);
+      useImportStore.getState().setError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -109,7 +90,14 @@ export function MediaBin() {
   const selectedCount = selectedAssetIds.length;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="relative flex flex-col h-full min-h-0">
+      {fileDragOver && (
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-accent bg-accent/15 text-center text-sm text-white">
+          Отпустите —
+          <br />
+          файлы добавятся в исходники
+        </div>
+      )}
       <div className="p-3 border-b border-border flex items-center justify-between">
         <h2 className="text-xs uppercase tracking-wider text-gray-400">
           Исходники{selectedCount > 1 ? ` · ${selectedCount} выбрано` : ''}
@@ -142,6 +130,12 @@ export function MediaBin() {
         </div>
       )}
 
+      {notice && (
+        <div className="mx-3 mt-2 p-2 text-xs bg-yellow-900/30 border border-yellow-700/60 rounded text-yellow-200">
+          {notice}
+        </div>
+      )}
+
       {error && (
         <div className="mx-3 mt-2 p-2 text-xs bg-red-900/30 border border-red-700 rounded text-red-300">
           {error}
@@ -156,7 +150,7 @@ export function MediaBin() {
       >
         {assets.length === 0 && !progress ? (
           <div className="text-center text-gray-500 text-xs mt-10 px-4">
-            Нажмите «+ Импорт» чтобы добавить файлы.
+            Перетащите сюда видео, аудио или целую папку из Finder — или нажмите «+ Импорт».
             <div className="mt-3 text-gray-600">
               Перетащите файл из этого списка на таймлайн.
               <br />

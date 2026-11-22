@@ -15,7 +15,9 @@ function resolveFfmpegPath(): string {
   // we're running as — this is what makes the universal build work on both
   // Apple Silicon (arm64) and Intel (x64).
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'ffmpeg', `ffmpeg-${process.arch}`);
+    // Per-arch binary if the build ships one, otherwise the universal `ffmpeg`.
+    const perArch = join(process.resourcesPath, 'ffmpeg', `ffmpeg-${process.arch}`);
+    return existsSync(perArch) ? perArch : join(process.resourcesPath, 'ffmpeg', 'ffmpeg');
   }
   // Dev: fall back to the ffmpeg-static binary for the host arch.
   const p = require('ffmpeg-static') as string;
@@ -30,7 +32,7 @@ function resolveFfprobePath(): string {
   return ffprobeStatic.path.replace('app.asar', 'app.asar.unpacked');
 }
 
-const ffmpegPath = resolveFfmpegPath();
+export const ffmpegPath = resolveFfmpegPath();
 const ffprobePath = resolveFfprobePath();
 
 function runJson<T = unknown>(bin: string, args: string[]): Promise<T> {
@@ -87,7 +89,7 @@ interface FfprobeRaw {
   };
 }
 
-async function probe(filePath: string): Promise<MediaProbe> {
+export async function probe(filePath: string): Promise<MediaProbe> {
   const raw = await runJson<FfprobeRaw>(ffprobePath, [
     '-v', 'quiet',
     '-print_format', 'json',

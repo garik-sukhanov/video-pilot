@@ -174,3 +174,14 @@ export interface ProjectMeta {
   clipCount: number;
   assetCount: number;
 }
+
+/** Состояние встроенного обновления из GitHub Releases (electron/updater.ts). */
+export type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'latest'; version: string }
+  | { status: 'available'; version: string; notes: string; sizeBytes: number }
+  | { status: 'downloading'; version: string; progress: number }
+  | { status: 'installing'; version: string }
+  | { status: 'error'; message: string }
+  | { status: 'unsupported'; message: string };
